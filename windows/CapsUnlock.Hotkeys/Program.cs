@@ -2,7 +2,6 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Windows.Automation;
 using System.Windows.Automation.Text;
 using System.Windows.Forms;
@@ -37,7 +36,6 @@ internal sealed class HotkeyWindow : Form
     private const uint VkT = 0x54;
 
     private readonly NotifyIcon _trayIcon;
-    private readonly string _cliPath;
     private bool _upperHotkeyRegistered;
     private bool _lowerHotkeyRegistered;
     private bool _invertCaseHotkeyRegistered;
@@ -47,7 +45,6 @@ internal sealed class HotkeyWindow : Form
     {
         ShowInTaskbar = false;
         WindowState = FormWindowState.Minimized;
-        _cliPath = FindCliPath();
 
         var menu = new ContextMenuStrip();
         menu.Items.Add("Exit CapsUnlock", null, (_, _) => Close());
@@ -222,7 +219,7 @@ internal sealed class HotkeyWindow : Form
                 return;
             }
 
-            var transformed = RunTransformation(operation, input);
+            var transformed = TextTransformations.Transform(operation, input);
             var replacement = prefix + transformed + suffix;
             valuePattern.SetValue(replacement);
 
@@ -278,72 +275,9 @@ internal sealed class HotkeyWindow : Form
         TransformSelection(operation);
     }
 
-    private string RunTransformation(string operation, string input)
-    {
-        using var process = new Process
-        {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = "node",
-                UseShellExecute = false,
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                StandardInputEncoding = Encoding.UTF8,
-                StandardOutputEncoding = Encoding.UTF8,
-                StandardErrorEncoding = Encoding.UTF8,
-                CreateNoWindow = true,
-            },
-        };
-        process.StartInfo.ArgumentList.Add(_cliPath);
-        process.StartInfo.ArgumentList.Add(operation);
-
-        if (!process.Start())
-        {
-            throw new InvalidOperationException("Could not start Node.js.");
-        }
-
-        var outputTask = process.StandardOutput.ReadToEndAsync();
-        var errorTask = process.StandardError.ReadToEndAsync();
-        process.StandardInput.Write(input);
-        process.StandardInput.Close();
-
-        if (!process.WaitForExit(10_000))
-        {
-            process.Kill(entireProcessTree: true);
-            throw new TimeoutException("The text transformation timed out.");
-        }
-
-        var output = outputTask.GetAwaiter().GetResult();
-        var error = errorTask.GetAwaiter().GetResult();
-        if (process.ExitCode != 0)
-        {
-            throw new InvalidOperationException(error.Trim());
-        }
-
-        return output;
-    }
-
     private void ShowNotice(string message)
     {
         _trayIcon.ShowBalloonTip(3000, "CapsUnlock", message, ToolTipIcon.Warning);
-    }
-
-    private static string FindCliPath()
-    {
-        for (var directory = new DirectoryInfo(AppContext.BaseDirectory);
-             directory is not null;
-             directory = directory.Parent)
-        {
-            var candidate = Path.Combine(directory.FullName, "src", "cli.js");
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-        }
-
-        throw new FileNotFoundException(
-            "Could not locate src\\cli.js. Run CapsUnlock from its repository.");
     }
 
     [DllImport("user32.dll", SetLastError = true)]

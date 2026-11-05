@@ -1,76 +1,94 @@
 # CapsUnlock
 
-A small, dependency-free JavaScript library and command-line tool for common text transformations.
+**Fix the case of selected text from anywhere on Windows.** No retyping, no
+clipboard changes, and no need to leave the app you're working in.
 
-## Requirements
+Select text, press a shortcut, and keep typing:
 
-Node.js 18 or newer.
+| Shortcut | Result |
+| --- | --- |
+| `Ctrl` + `Shift` + `U` | `make this uppercase` → `MAKE THIS UPPERCASE` |
+| `Ctrl` + `Shift` + `L` | `MAKE THIS LOWERCASE` → `make this lowercase` |
+| `Ctrl` + `Shift` + `I` | `Hello World!` → `hELLO wORLD!` |
+| `Ctrl` + `Shift` + `T` | `hELLO, WORLD!` → `Hello, World!` |
 
-## Library
+CapsUnlock is a tiny text-transformation library, a command-line tool, and a
+Windows utility for transforming selected text in place.
 
-```js
-import {
-  invertCase,
-  sentenceCase,
-  titleCase,
-  transformText,
-} from "caps-unlock";
+## Get CapsUnlock for Windows
 
-titleCase("hELLO, WORLD!"); // "Hello, World!"
-sentenceCase("hELLO WORLD. HOW ARE YOU?"); // "Hello world. How are you?"
-invertCase("Hello, 123!"); // "hELLO, 123!"
-transformText("hello", "uppercase"); // "HELLO"
+**[Download the latest Windows installer](https://github.com/mennymen/CapsUnlock/releases/latest/download/CapsUnlock-Setup-0.1.0.exe).**
+
+Run the installer once. CapsUnlock launches after setup and starts automatically
+whenever you sign in. It installs just for your Windows account, needs no
+administrator access or Node.js, and can be removed from **Settings → Apps**.
+
+The app stays in the notification area while it runs. Select text in a supported
+app and press one of the shortcuts above. CapsUnlock preserves multi-line
+selections and never reads, changes, or clears the clipboard. Exit from the
+CapsUnlock notification-area icon's menu.
+
+> **Compatibility:** Apps must expose editable text selections through Windows
+> UI Automation. Unsupported controls show a notification and remain unchanged.
+> A shortcut may also be unavailable if another program already uses it.
+
+## Try the library
+
+Install the package from npm:
+
+```sh
+npm install caps-unlock
 ```
 
-Available functions are `upperCase`, `lowerCase`, `invertCase`, `titleCase`,
-`sentenceCase`, `trim`, and `collapseWhitespace`. `transformText` accepts one of
+```js
+import { invertCase, sentenceCase, titleCase, transformText } from "caps-unlock";
+
+invertCase("Hello, 123!");                     // "hELLO, 123!"
+titleCase("hELLO, WORLD!");                    // "Hello, World!"
+sentenceCase("hELLO. HOW ARE YOU?");            // "Hello. How are you?"
+transformText("hello", "uppercase");            // "HELLO"
+```
+
+Available functions: `upperCase`, `lowerCase`, `invertCase`, `titleCase`,
+`sentenceCase`, `trim`, and `collapseWhitespace`. `transformText` accepts
 `uppercase`, `lowercase`, `invert`, `title`, `sentence`, `trim`, or
 `collapse-whitespace`.
 
-Case conversion uses JavaScript's Unicode-aware string casing. Title case
-capitalizes each word, lowercases its remaining letters, and treats hyphens and
-punctuation as word separators. Sentence case lowercases the text and
-capitalizes the first letter and letters after `.`, `!`, or `?` followed by
-whitespace. `collapseWhitespace` replaces each run of whitespace with one space
+The case transformations support Unicode. Title case capitalizes each word and
+lowercases the remaining letters. Sentence case lowercases the text and
+capitalizes its first letter and letters after `.`, `!`, or `?` followed by
+whitespace. `collapseWhitespace` turns each run of whitespace into one space
 without trimming the ends.
 
-## CLI
+## Use the command line
+
+Pass text directly or pipe it in:
 
 ```sh
 npx caps-unlock title "hELLO, WORLD!"
 echo "hello world" | npx caps-unlock uppercase
 ```
 
-Run `caps-unlock --help` for the supported operations.
+Run `caps-unlock --help` to see all operations.
 
-## Windows global shortcuts
+## Build from source
 
-The Windows companion registers system-wide shortcuts that transform the
-currently selected text in most apps:
-
-- `Ctrl+Shift+U`: uppercase
-- `Ctrl+Shift+L`: lowercase
-- `Ctrl+Shift+I`: invert case
-- `Ctrl+Shift+T`: title case
-
-Requires Windows, Node.js 18 or newer, and the .NET 8 SDK. From the repository
-folder, start the background utility with:
-
-```powershell
-dotnet run --project .\windows\CapsUnlock.Hotkeys\CapsUnlock.Hotkeys.csproj
-```
-
-Select text in another app and press a shortcut. CapsUnlock reads the selection
-and document through Windows UI Automation, replaces the selected range in the
-document value, and restores the transformed range selection. This preserves
-multi-line text without simulating Enter keystrokes. It never reads from, writes
-to, or clears the clipboard. Apps must expose an editable value and a consistent
-text range through UI Automation; unsupported apps or controls receive a
-notification and are left unchanged. Exit the utility from its notification-area
-icon. Shortcuts can be unavailable if another application already uses them.
-
-## Development
+Run the JavaScript tests with Node.js 18 or newer:
 
 ```sh
 npm test
+```
+
+To build the per-user Windows installer on Windows, install the .NET 8 SDK and
+[Inno Setup 6](https://jrsoftware.org/isdl.php), then run:
+
+```powershell
+.\scripts\build-installer.ps1
+```
+
+The installer is written to `dist\CapsUnlock-Setup-0.1.0.exe`. To run the
+Windows utility directly while developing:
+
+```powershell
+dotnet run --project .\windows\CapsUnlock.Hotkeys\CapsUnlock.Hotkeys.csproj
 ```
