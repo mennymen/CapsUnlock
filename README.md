@@ -43,6 +43,32 @@ echo "hello world" | npx caps-unlock uppercase
 
 Run `caps-unlock --help` for the supported operations.
 
+## Windows global shortcuts
+
+The Windows companion registers system-wide shortcuts that transform the
+currently selected text in most apps:
+
+- `Ctrl+Shift+U`: uppercase
+- `Ctrl+Shift+L`: lowercase
+- `Ctrl+Shift+I`: invert case
+- `Ctrl+Shift+T`: title case
+
+Requires Windows, Node.js 18 or newer, and the .NET 8 SDK. From the repository
+folder, start the background utility with:
+
+```powershell
+dotnet run --project .\windows\CapsUnlock.Hotkeys\CapsUnlock.Hotkeys.csproj
+```
+
+Select text in another app and press a shortcut. CapsUnlock reads the selection
+and document through Windows UI Automation, replaces the selected range in the
+document value, and restores the transformed range selection. This preserves
+multi-line text without simulating Enter keystrokes. It never reads from, writes
+to, or clears the clipboard. Apps must expose an editable value and a consistent
+text range through UI Automation; unsupported apps or controls receive a
+notification and are left unchanged. Exit the utility from its notification-area
+icon. Shortcuts can be unavailable if another application already uses them.
+
 ## Development
 
 ```sh
