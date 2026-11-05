@@ -59,4 +59,10 @@ test("CLI transforms command-line text and reads piped input", () => {
   });
   assert.equal(fromStdin.status, 0);
   assert.equal(fromStdin.stdout, "HELLO");
+
+  const invalidOperation = spawnSync(process.execPath, [cliPath, "unknown", "hello"], {
+    encoding: "utf8",
+  });
+  assert.equal(invalidOperation.status, 1);
+  assert.match(invalidOperation.stderr, /Usage: caps-unlock/);
 });
