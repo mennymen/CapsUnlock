@@ -1,4 +1,4 @@
-# Text Transformer
+# CapsUnlock
 
 A small, dependency-free JavaScript library and command-line tool for common text transformations.
 
@@ -14,7 +14,7 @@ import {
   sentenceCase,
   titleCase,
   transformText,
-} from "text-transformer";
+} from "caps-unlock";
 
 titleCase("hELLO, WORLD!"); // "Hello, World!"
 sentenceCase("hELLO WORLD. HOW ARE YOU?"); // "Hello world. How are you?"
@@ -37,11 +37,11 @@ without trimming the ends.
 ## CLI
 
 ```sh
-npx text-transform title "hELLO, WORLD!"
-echo "hello world" | npx text-transform uppercase
+npx caps-unlock title "hELLO, WORLD!"
+echo "hello world" | npx caps-unlock uppercase
 ```
 
-Run `text-transform --help` for the supported operations.
+Run `caps-unlock --help` for the supported operations.
 
 ## Development
 

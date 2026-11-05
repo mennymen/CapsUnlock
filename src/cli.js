@@ -27,7 +27,7 @@ if (!operation || !Object.hasOwn(TRANSFORMATIONS, operation)) {
 function printUsage() {
   console.error(
     [
-      "Usage: text-transform <operation> [text]",
+      "Usage: caps-unlock <operation> [text]",
       "",
       `Operations: ${Object.keys(TRANSFORMATIONS).join(", ")}`,
       "If text is omitted, input is read from stdin.",
