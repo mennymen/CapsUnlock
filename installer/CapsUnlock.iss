@@ -1,5 +1,5 @@
 #define AppName "CapsUnlock"
-#define AppVersion "0.1.0"
+#define AppVersion "0.2.1"
 #define AppPublisher "Manuel Melendez"
 #define AppExeName "CapsUnlock.Hotkeys.exe"
 

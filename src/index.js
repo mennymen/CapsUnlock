@@ -15,6 +15,14 @@ function capitalizeFirstLetter(text) {
   ].join("");
 }
 
+function splitWords(text) {
+  const separated = text
+    .replace(/([\p{Ll}\p{N}])(\p{Lu})/gu, "$1 $2")
+    .replace(/(\p{Lu})(\p{Lu}\p{Ll})/gu, "$1 $2");
+
+  return separated.match(/[\p{L}\p{N}][\p{L}\p{M}\p{N}]*/gu) ?? [];
+}
+
 export function upperCase(text) {
   return text.toUpperCase();
 }
@@ -43,9 +51,34 @@ export function titleCase(text) {
 export function sentenceCase(text) {
   return text
     .toLowerCase()
-    .replace(/(^|[.!?]\s+)(\p{L})/gu, (_match, boundary, letter) =>
+    .replace(/(^|[.!?]\s+|[\r\n\u2028\u2029]+)(\p{L})/gu, (_match, boundary, letter) =>
       boundary + letter.toUpperCase(),
     );
+}
+
+export function camelCase(text) {
+  const words = splitWords(text).map((word) => word.toLowerCase());
+  return words
+    .map((word, index) => (index === 0 ? word : capitalizeFirstLetter(word)))
+    .join("");
+}
+
+export function pascalCase(text) {
+  return splitWords(text)
+    .map((word) => capitalizeFirstLetter(word))
+    .join("");
+}
+
+export function snakeCase(text) {
+  return splitWords(text)
+    .map((word) => word.toLowerCase())
+    .join("_");
+}
+
+export function kebabCase(text) {
+  return splitWords(text)
+    .map((word) => word.toLowerCase())
+    .join("-");
 }
 
 export function trim(text) {
@@ -56,14 +89,23 @@ export function collapseWhitespace(text) {
   return text.replace(/\s+/gu, " ");
 }
 
+export function removeBlankLines(text) {
+  return text.replace(/(?<=\n|^)[^\S\r\n]*\r?\n/gu, "");
+}
+
 export const TRANSFORMATIONS = Object.freeze({
   uppercase: upperCase,
   lowercase: lowerCase,
   invert: invertCase,
   title: titleCase,
   sentence: sentenceCase,
+  camel: camelCase,
+  pascal: pascalCase,
+  snake: snakeCase,
+  kebab: kebabCase,
   trim,
   "collapse-whitespace": collapseWhitespace,
+  "remove-blank-lines": removeBlankLines,
 });
 
 export function transformText(text, operation) {

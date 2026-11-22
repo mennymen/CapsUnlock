@@ -20,26 +20,15 @@ internal static class Program
 
 internal sealed class HotkeyWindow : Form
 {
-    private const int UppercaseHotkeyId = 1;
-    private const int LowercaseHotkeyId = 2;
-    private const int InvertCaseHotkeyId = 3;
-    private const int TitleCaseHotkeyId = 4;
     private const int WmHotkey = 0x0312;
     private const int VkControl = 0x11;
     private const int VkShift = 0x10;
-    private const uint ModControl = 0x0002;
-    private const uint ModShift = 0x0004;
+    private const int VkAlt = 0x12;
     private const uint ModNoRepeat = 0x4000;
-    private const uint VkU = 0x55;
-    private const uint VkL = 0x4C;
-    private const uint VkI = 0x49;
-    private const uint VkT = 0x54;
 
     private readonly NotifyIcon _trayIcon;
-    private bool _upperHotkeyRegistered;
-    private bool _lowerHotkeyRegistered;
-    private bool _invertCaseHotkeyRegistered;
-    private bool _titleCaseHotkeyRegistered;
+    private readonly HashSet<int> _registeredHotkeys = [];
+    private List<HotkeyPreference> _preferences = [];
 
     public HotkeyWindow()
     {
@@ -47,6 +36,8 @@ internal sealed class HotkeyWindow : Form
         WindowState = FormWindowState.Minimized;
 
         var menu = new ContextMenuStrip();
+        menu.Items.Add("Settings...", null, (_, _) => OpenSettings());
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Exit CapsUnlock", null, (_, _) => Close());
         _trayIcon = new NotifyIcon
         {
@@ -62,68 +53,55 @@ internal sealed class HotkeyWindow : Form
         base.OnShown(e);
         Hide();
 
-        _upperHotkeyRegistered = RegisterHotKey(
-            Handle,
-            UppercaseHotkeyId,
-            ModControl | ModShift | ModNoRepeat,
-            VkU);
-        _lowerHotkeyRegistered = RegisterHotKey(
-            Handle,
-            LowercaseHotkeyId,
-            ModControl | ModShift | ModNoRepeat,
-            VkL);
-        _invertCaseHotkeyRegistered = RegisterHotKey(
-            Handle,
-            InvertCaseHotkeyId,
-            ModControl | ModShift | ModNoRepeat,
-            VkI);
-        _titleCaseHotkeyRegistered = RegisterHotKey(
-            Handle,
-            TitleCaseHotkeyId,
-            ModControl | ModShift | ModNoRepeat,
-            VkT);
-
-        if (!_upperHotkeyRegistered
-            || !_lowerHotkeyRegistered
-            || !_invertCaseHotkeyRegistered
-            || !_titleCaseHotkeyRegistered)
+        try
         {
-            var error = new Win32Exception(Marshal.GetLastWin32Error());
-            Close();
+            _preferences = HotkeySettingsStore.Load();
+        }
+        catch (Exception exception) when (
+            exception is IOException
+                or UnauthorizedAccessException
+                or System.Text.Json.JsonException)
+        {
             MessageBox.Show(
-                $"Could not register the global shortcuts. They may already be in use.\n\n{error.Message}",
+                $"Could not load CapsUnlock settings. Default shortcuts will be used.\n\n{exception.Message}",
                 "CapsUnlock",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
-            return;
+            _preferences = HotkeyCatalog.CreateDefaults();
         }
 
-        _trayIcon.ShowBalloonTip(
-            3000,
-            "CapsUnlock is ready",
-            "Select text and use Ctrl+Shift+U/L/I/T to change its case.",
-            ToolTipIcon.Info);
+        var conflicts = RegisterHotkeys(_preferences);
+        if (conflicts.Count > 0)
+        {
+            ShowNotice($"Some shortcuts could not be registered: {string.Join(", ", conflicts)}. Open Settings to change them.");
+        }
+        else
+        {
+            _trayIcon.ShowBalloonTip(
+                3000,
+                "CapsUnlock is ready",
+                "Select text, then use a shortcut. Right-click the tray icon for Settings.",
+                ToolTipIcon.Info);
+        }
     }
 
     protected override void WndProc(ref Message message)
     {
         if (message.Msg == WmHotkey)
         {
-            var operation = message.WParam.ToInt32() switch
-            {
-                UppercaseHotkeyId => ("uppercase", (int)VkU),
-                LowercaseHotkeyId => ("lowercase", (int)VkL),
-                InvertCaseHotkeyId => ("invert", (int)VkI),
-                TitleCaseHotkeyId => ("title", (int)VkT),
-                _ => ((string Operation, int Key)?)null,
-            };
-
-            if (operation is not null)
+            var hotkeyId = message.WParam.ToInt32();
+            var definition = HotkeyCatalog.Definitions.FirstOrDefault(
+                item => item.Id == hotkeyId);
+            var preference = definition is null
+                ? null
+                : _preferences.FirstOrDefault(item => item.Operation == definition.Operation);
+            if (definition is not null && preference is { Enabled: true })
             {
                 BeginInvoke(new Action(
                     () => _ = TransformSelectionAfterHotkeyRelease(
-                        operation.Value.Operation,
-                        operation.Value.Key)));
+                        definition.Operation,
+                        char.ToUpperInvariant(preference.Key[0]),
+                        HotkeyCatalog.GetModifierFlags(preference.Modifiers))));
             }
 
             return;
@@ -134,26 +112,7 @@ internal sealed class HotkeyWindow : Form
 
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
-        if (_upperHotkeyRegistered)
-        {
-            UnregisterHotKey(Handle, UppercaseHotkeyId);
-        }
-
-        if (_lowerHotkeyRegistered)
-        {
-            UnregisterHotKey(Handle, LowercaseHotkeyId);
-        }
-
-        if (_invertCaseHotkeyRegistered)
-        {
-            UnregisterHotKey(Handle, InvertCaseHotkeyId);
-        }
-
-        if (_titleCaseHotkeyRegistered)
-        {
-            UnregisterHotKey(Handle, TitleCaseHotkeyId);
-        }
-
+        UnregisterAllHotkeys();
         _trayIcon.Visible = false;
         _trayIcon.Dispose();
         base.OnFormClosed(e);
@@ -164,6 +123,12 @@ internal sealed class HotkeyWindow : Form
         try
         {
             var focusedElement = AutomationElement.FocusedElement;
+            if (focusedElement is not null && !IsSupportedTarget(focusedElement))
+            {
+                ShowNotice("For safety, text replacement is currently supported only in Windows Notepad.");
+                return;
+            }
+
             if (focusedElement is null
                 || !focusedElement.TryGetCurrentPattern(TextPattern.Pattern, out var patternObject)
                 || patternObject is not TextPattern textPattern)
@@ -247,6 +212,7 @@ internal sealed class HotkeyWindow : Form
         }
         catch (Exception exception) when (
             exception is ElementNotAvailableException
+                or ArgumentException
                 or InvalidOperationException
                 or IOException
                 or TimeoutException
@@ -257,11 +223,27 @@ internal sealed class HotkeyWindow : Form
         }
     }
 
-    private async Task TransformSelectionAfterHotkeyRelease(string operation, int hotkey)
+    private static bool IsSupportedTarget(AutomationElement element)
+    {
+        var processId = (int)element.GetCurrentPropertyValue(AutomationElement.ProcessIdProperty);
+        using var process = Process.GetProcessById(processId);
+        return IsSupportedTarget(process.ProcessName, element.Current.ControlType.Id);
+    }
+
+    internal static bool IsSupportedTarget(string processName, int controlTypeId)
+    {
+        return string.Equals(processName, "notepad", StringComparison.OrdinalIgnoreCase)
+            && controlTypeId == ControlType.Edit.Id;
+    }
+
+    private async Task TransformSelectionAfterHotkeyRelease(
+        string operation,
+        int hotkey,
+        uint modifiers)
     {
         await Task.Delay(100);
         var stopwatch = Stopwatch.StartNew();
-        while (IsKeyDown(VkControl) || IsKeyDown(VkShift) || IsKeyDown(hotkey))
+        while (IsKeyDown(hotkey) || AreModifiersDown(modifiers))
         {
             if (stopwatch.ElapsedMilliseconds >= 2000)
             {
@@ -273,6 +255,100 @@ internal sealed class HotkeyWindow : Form
         }
 
         TransformSelection(operation);
+    }
+
+    private bool ApplySettings(IReadOnlyList<HotkeyPreference> updated)
+    {
+        var previous = _preferences;
+        UnregisterAllHotkeys();
+
+        var conflicts = RegisterHotkeys(updated);
+        if (conflicts.Count > 0)
+        {
+            UnregisterAllHotkeys();
+            var restoreConflicts = RegisterHotkeys(previous);
+            var restoreMessage = restoreConflicts.Count == 0
+                ? ""
+                : $" Previous shortcuts also could not be restored: {string.Join(", ", restoreConflicts)}.";
+            ShowNotice($"Could not register {string.Join(", ", conflicts)}. Settings were not changed.{restoreMessage}");
+            return false;
+        }
+
+        try
+        {
+            HotkeySettingsStore.Save(updated);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            UnregisterAllHotkeys();
+            var restoreConflicts = RegisterHotkeys(previous);
+            var restoreMessage = restoreConflicts.Count == 0
+                ? ""
+                : $" Previous shortcuts also could not be restored: {string.Join(", ", restoreConflicts)}.";
+            ShowNotice($"Could not save settings: {exception.Message}{restoreMessage}");
+            return false;
+        }
+
+        _preferences = updated.ToList();
+        return true;
+    }
+
+    private List<string> RegisterHotkeys(IReadOnlyList<HotkeyPreference> preferences)
+    {
+        var conflicts = new List<string>();
+        foreach (var definition in HotkeyCatalog.Definitions)
+        {
+            var preference = preferences.First(item => item.Operation == definition.Operation);
+            if (!preference.Enabled)
+            {
+                continue;
+            }
+
+            var modifiers = HotkeyCatalog.GetModifierFlags(preference.Modifiers) | ModNoRepeat;
+            var key = char.ToUpperInvariant(preference.Key[0]);
+            if (RegisterHotKey(Handle, definition.Id, modifiers, key))
+            {
+                _registeredHotkeys.Add(definition.Id);
+            }
+            else
+            {
+                conflicts.Add($"{preference.Modifiers}+{key}");
+            }
+        }
+
+        return conflicts;
+    }
+
+    private void UnregisterAllHotkeys()
+    {
+        foreach (var id in _registeredHotkeys)
+        {
+            UnregisterHotKey(Handle, id);
+        }
+
+        _registeredHotkeys.Clear();
+    }
+
+    private void OpenSettings()
+    {
+        using var dialog = new HotkeySettingsDialog(_preferences);
+        if (dialog.ShowDialog(this) == DialogResult.OK
+            && dialog.Preferences is not null
+            && ApplySettings(dialog.Preferences))
+        {
+            _trayIcon.ShowBalloonTip(
+                2500,
+                "CapsUnlock settings saved",
+                "Your shortcut changes are active.",
+                ToolTipIcon.Info);
+        }
+    }
+
+    private static bool AreModifiersDown(uint modifiers)
+    {
+        return ((modifiers & 0x0002) != 0 && IsKeyDown(VkControl))
+            || ((modifiers & 0x0004) != 0 && IsKeyDown(VkShift))
+            || ((modifiers & 0x0001) != 0 && IsKeyDown(VkAlt));
     }
 
     private void ShowNotice(string message)

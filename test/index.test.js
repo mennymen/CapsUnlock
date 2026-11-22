@@ -4,9 +4,14 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   collapseWhitespace,
+  camelCase,
   invertCase,
+  kebabCase,
   lowerCase,
+  pascalCase,
+  removeBlankLines,
   sentenceCase,
+  snakeCase,
   titleCase,
   transformText,
   trim,
@@ -31,15 +36,30 @@ test("titleCase capitalizes words and lowercases the rest", () => {
 test("sentenceCase capitalizes sentence starts", () => {
   assert.equal(sentenceCase("hELLO WORLD. HOW ARE YOU?"), "Hello world. How are you?");
   assert.equal(sentenceCase("already lower"), "Already lower");
+  assert.equal(sentenceCase("first line\nSECOND LINE"), "First line\nSecond line");
+});
+
+test("developer naming styles split camel case and acronyms", () => {
+  const input = "HTTPServer myURLValue";
+  assert.equal(camelCase(input), "httpServerMyUrlValue");
+  assert.equal(pascalCase(input), "HttpServerMyUrlValue");
+  assert.equal(snakeCase(input), "http_server_my_url_value");
+  assert.equal(kebabCase(input), "http-server-my-url-value");
 });
 
 test("trim and collapseWhitespace handle surrounding and repeated spaces", () => {
   assert.equal(trim(" \t hello \n"), "hello");
   assert.equal(collapseWhitespace(" \t hello \n world  "), " hello world ");
+  assert.equal(removeBlankLines("first\r\n\r\n  \r\nsecond\n"), "first\r\nsecond\n");
 });
 
 test("transformText dispatches supported operations and rejects unknown ones", () => {
   assert.equal(transformText("hello", "uppercase"), "HELLO");
+  assert.equal(transformText("Hello World", "camel"), "helloWorld");
+  assert.equal(transformText("Hello World", "pascal"), "HelloWorld");
+  assert.equal(transformText("Hello World", "snake"), "hello_world");
+  assert.equal(transformText("Hello World", "kebab"), "hello-world");
+  assert.equal(transformText("one\n\n two", "remove-blank-lines"), "one\n two");
   assert.throws(() => transformText("hello", "unknown"), RangeError);
 });
 
